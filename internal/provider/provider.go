@@ -2,9 +2,13 @@ package provider
 
 import (
 	"context"
+	"net"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
+	spiretoken "github.com/spiffe/spire/proto/spire/api/server/agent/v1"
+	spireentry "github.com/spiffe/spire/proto/spire/api/server/entry/v1"
+	"google.golang.org/grpc"
 )
 
 func init() {
@@ -23,14 +27,64 @@ func init() {
 	// }
 }
 
+const (
+	provCfgAuthKubeExecAttr = "auth_kube_exec"
+	// provCfgAuthSSHAttr      = "auth_ssh"
+	provCfgAuthX509Attr = "auth_x509"
+
+	provCfgAuthKubeExecNamespaceAttr     = "namespace"
+	provCfgAuthKubeExecLabelSelectorAttr = "label_selectors"
+
+	provCfgAuthX509ServerHostAttr = "server_host"
+	provCfgAuthX509ServerPortAttr = "server_port"
+)
+
 func New(version string) func() *schema.Provider {
 	return func() *schema.Provider {
 		p := &schema.Provider{
+			Schema: map[string]*schema.Schema{
+				provCfgAuthKubeExecAttr: {
+					Description:   "Reaches the SPIRE server on its local unix socket via `kubectl exec`.",
+					Type:          schema.TypeList,
+					MaxItems:      1,
+					ConflictsWith: []string{provCfgAuthX509Attr},
+					Elem: &schema.Resource{
+						Schema: map[string]*schema.Schema{
+							provCfgAuthKubeExecNamespaceAttr: {
+								Description: "Host where the SPIRE server can be reached.",
+								Required:    true,
+							},
+							provCfgAuthKubeExecLabelSelectorAttr: {
+								Description: "Port on which the SPIRE server can be reached.",
+								Required:    true,
+							},
+						},
+					},
+				},
+				provCfgAuthX509Attr: {
+					Description:   "Uses an x509 SVID that has the admin flag enabled to reach the SPIRE server on its remote address.",
+					Type:          schema.TypeList,
+					MaxItems:      1,
+					ConflictsWith: []string{provCfgAuthKubeExecAttr},
+					Elem: &schema.Resource{
+						Schema: map[string]*schema.Schema{
+							provCfgAuthX509ServerHostAttr: {
+								Description: "Host where the SPIRE server can be reached.",
+								Required:    true,
+							},
+							provCfgAuthX509ServerPortAttr: {
+								Description: "Port on which the SPIRE server can be reached.",
+								Required:    true,
+							},
+						},
+					},
+				},
+			},
 			DataSourcesMap: map[string]*schema.Resource{
-				"scaffolding_data_source": dataSourceScaffolding(),
+				"spire_spiffe_id": dataSourceSpiffeID(),
 			},
 			ResourcesMap: map[string]*schema.Resource{
-				"scaffolding_resource": resourceScaffolding(),
+				"spire_registration_entry": resourceRegistrationEntry(),
 			},
 		}
 
@@ -41,17 +95,26 @@ func New(version string) func() *schema.Provider {
 }
 
 type apiClient struct {
-	// Add whatever fields, client or connection info, etc. here
-	// you would need to setup to communicate with the upstream
-	// API.
+	spireServer      *grpc.ClientConn
+	spireEntryClient spireentry.EntryClient
+	spireTokenClient spiretoken.AgentClient
 }
 
 func configure(version string, p *schema.Provider) func(context.Context, *schema.ResourceData) (interface{}, diag.Diagnostics) {
-	return func(context.Context, *schema.ResourceData) (interface{}, diag.Diagnostics) {
-		// Setup a User-Agent for your API client (replace the provider name for yours):
-		// userAgent := p.UserAgent("terraform-provider-scaffolding", version)
-		// TODO: myClient.UserAgent = userAgent
+	return func(ctx context.Context, d *schema.ResourceData) (interface{}, diag.Diagnostics) {
 
-		return &apiClient{}, nil
+		host := d.Get(provCfgServerHostAttr).(string)
+		port := d.Get(provCfgServerPortAttr).(string)
+		serverAddr := net.JoinHostPort(host, port)
+
+		spireServer, err := grpc.DialContext(ctx, serverAddr)
+		if err != nil {
+			return nil, diag.FromErr(err)
+		}
+		return &apiClient{
+			spireServer:      spireServer,
+			spireEntryClient: spireentry.NewEntryClient(spireServer),
+			spireTokenClient: spiretoken.NewAgentClient(spireServer),
+		}, nil
 	}
 }
