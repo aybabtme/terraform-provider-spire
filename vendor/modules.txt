@@ -190,7 +190,7 @@ github.com/posener/complete/cmd/install
 github.com/posener/complete/match
 # github.com/russross/blackfriday v1.5.2
 github.com/russross/blackfriday
-# github.com/spiffe/go-spiffe/v2 v2.0.0-beta.5
+# github.com/spiffe/go-spiffe/v2 v2.0.0-beta.11
 ## explicit
 github.com/spiffe/go-spiffe/v2/spiffeid
 # github.com/spiffe/spire/proto/spire v0.12.1
@@ -214,8 +214,6 @@ github.com/zclconf/go-cty/cty/function/stdlib
 github.com/zclconf/go-cty/cty/gocty
 github.com/zclconf/go-cty/cty/json
 github.com/zclconf/go-cty/cty/set
-# github.com/zeebo/errs v1.2.2
-github.com/zeebo/errs
 # go.opencensus.io v0.22.4
 go.opencensus.io
 go.opencensus.io/internal
